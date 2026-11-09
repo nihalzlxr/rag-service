@@ -82,3 +82,24 @@ export const tenants = pgTable(
 
 export type Tenant = typeof tenants.$inferSelect;
 export type NewTenant = typeof tenants.$inferInsert;
+
+export const apiKeys = pgTable(
+  "api_keys",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    keyHash: text("key_hash").notNull(), // sha256 hash of the actual key (never plaintext)
+    tenantId: uuid("tenant_id")
+      .notNull()
+      .references(() => tenants.id, { onDelete: "cascade" }),
+    roles: text("roles").array().default(["public"]).notNull(), // roles assigned to this key
+    name: text("name").notNull(), // human-readable label
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+    revokedAt: timestamp("revoked_at"), // null = active
+  },
+  (table) => ({
+    tenantIdIdx: index("api_keys_tenant_id_idx").on(table.tenantId),
+  })
+);
+
+export type ApiKey = typeof apiKeys.$inferSelect;
+export type NewApiKey = typeof apiKeys.$inferInsert;
