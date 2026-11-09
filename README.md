@@ -16,7 +16,11 @@ Most RAG demos answer questions. Few show that retrieval is **correct**, **safe 
 
 - [x] Next.js app, Postgres 16 + pgvector, Redis, Docker Compose
 - [x] Health endpoint (`/api/health`) checking Postgres and Redis
-- [ ] Schema: documents, chunks (tenant_id, allowed_roles, embedding)
+- [x] Schema: documents, chunks (tenant_id, allowed_roles, embedding)
+- [x] API-key auth table, tenants table, events table
+- [x] Row-Level Security with `rag_app` non-superuser role, `FORCE ROW LEVEL SECURITY`
+- [x] API-key auth middleware with `x-tenant-id` / `x-roles` headers
+- [x] Automated RLS tests in CI (GitHub Actions)
 - [ ] Ingestion pipeline (BullMQ): parse, chunk, embed, index, with retries and idempotency
 - [ ] Hybrid retrieval (vector + keyword) with tenant/role filtering
 - [ ] Reranking and cited answers with an "I don't know" path
@@ -29,13 +33,14 @@ Most RAG demos answer questions. Few show that retrieval is **correct**, **safe 
 ## Architecture
 
 ```
-Upload -> Next.js API -> Redis queue (BullMQ) -> Worker: chunk -> embed -> index -> Postgres + pgvector
-                                                                                         ^
-Question -> Next.js API -> filter by tenant/role -> hybrid search -> rerank -> LLM -------+
+Upload -> Next.js API -> Auth Middleware -> Redis queue (BullMQ) -> Worker: chunk -> embed -> index -> Postgres + pgvector
+                                                                                          ^
+Question -> Auth Middleware -> Next.js API -> filter by tenant/role -> hybrid search -> rerank -> LLM -------+
                                                                        (answer with citations)
 ```
 
 - The **API** accepts requests and returns quickly.
+- The **auth middleware** validates API keys, sets `x-tenant-id` and `x-roles` headers for RLS enforcement.
 - The **worker** is a separate process, because embedding is slow and can fail. Jobs retry with backoff and are idempotent (keyed by content hash).
 - **Postgres** holds documents, chunks, vectors, and keyword indexes in one place.
 
@@ -55,6 +60,8 @@ Also to be reported: groundedness score, cross-tenant leakage tests (target: zer
 ## Tech stack
 
 Next.js (App Router), TypeScript, PostgreSQL 16 + pgvector, Drizzle ORM, BullMQ + Redis, Vercel AI SDK, Zod. Node 22+, pnpm.
+
+Security: `rag_app` non-superuser role, `FORCE ROW LEVEL SECURITY` on documents/chunks, `SET LOCAL` app settings via `withRLS()` helper, API-key auth middleware. Testing: Vitest + GitHub Actions CI for automated RLS tests.
 
 The model provider is swappable. Embedding dimensions are fixed per model, so changing the embedding model requires re-embedding all chunks.
 
