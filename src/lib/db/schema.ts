@@ -42,6 +42,10 @@ export const chunks = pgTable(
     tenantId: uuid("tenant_id")
       .notNull()
       .references(() => documents.id, { onDelete: "cascade" }),
+    allowedRoles: text("allowed_roles")
+      .array()
+      .default(["public"])
+      .notNull(), // which roles can read this chunk
     content: text("content").notNull(), // the chunk text
     embedding: vector("embedding", { dimensions: 1536 }), // pgvector column (OpenAI text-embedding-3-small = 1536)
     chunkIndex: integer("chunk_index").notNull(), // order within document
