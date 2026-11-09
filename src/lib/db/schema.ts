@@ -41,7 +41,7 @@ export const chunks = pgTable(
       .references(() => documents.id, { onDelete: "cascade" }),
     tenantId: uuid("tenant_id")
       .notNull()
-      .references(() => documents.id, { onDelete: "cascade" }),
+      .references(() => tenants.id, { onDelete: "cascade" }),
     allowedRoles: text("allowed_roles")
       .array()
       .default(["public"])
@@ -67,3 +67,18 @@ export type Document = typeof documents.$inferSelect;
 export type NewDocument = typeof documents.$inferInsert;
 export type Chunk = typeof chunks.$inferSelect;
 export type NewChunk = typeof chunks.$inferInsert;
+
+export const tenants = pgTable(
+  "tenants",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    name: text("name").notNull(),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+  },
+  (table) => ({
+    nameIdx: index("tenants_name_idx").on(table.name),
+  })
+);
+
+export type Tenant = typeof tenants.$inferSelect;
+export type NewTenant = typeof tenants.$inferInsert;
