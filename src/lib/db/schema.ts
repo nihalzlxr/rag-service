@@ -17,6 +17,7 @@ export const documents = pgTable(
     title: text("title").notNull(),
     source: text("source"), // URL, file path, etc.
     content: text("content").notNull(), // full text for reference
+    tenantId: uuid("tenant_id").notNull(), // which tenant owns this document
     metadata: jsonb("metadata").default({}), // flexible extra data
     createdAt: timestamp("created_at").defaultNow().notNull(),
     updatedAt: timestamp("updated_at")
@@ -27,6 +28,7 @@ export const documents = pgTable(
   (table) => ({
     titleIdx: index("documents_title_idx").on(table.title),
     createdAtIdx: index("documents_created_at_idx").on(table.createdAt),
+    tenantIdIdx: index("documents_tenant_id_idx").on(table.tenantId),
   })
 );
 
@@ -37,6 +39,9 @@ export const chunks = pgTable(
     documentId: uuid("document_id")
       .notNull()
       .references(() => documents.id, { onDelete: "cascade" }),
+    tenantId: uuid("tenant_id")
+      .notNull()
+      .references(() => documents.id, { onDelete: "cascade" }),
     content: text("content").notNull(), // the chunk text
     embedding: vector("embedding", { dimensions: 1536 }), // pgvector column (OpenAI text-embedding-3-small = 1536)
     chunkIndex: integer("chunk_index").notNull(), // order within document
@@ -45,6 +50,7 @@ export const chunks = pgTable(
   },
   (table) => ({
     documentIdIdx: index("chunks_document_id_idx").on(table.documentId),
+    tenantIdIdx: index("chunks_tenant_id_idx").on(table.tenantId),
     // HNSW index for fast vector similarity search (created in migration)
     embeddingIdx: index("chunks_embedding_idx").using(
       "hnsw",
