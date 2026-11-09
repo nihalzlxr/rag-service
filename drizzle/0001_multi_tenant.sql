@@ -69,21 +69,21 @@ ALTER TABLE documents FORCE ROW LEVEL SECURITY;
 ALTER TABLE chunks FORCE ROW LEVEL SECURITY;
 
 -- 13. RLS policies: tenant_id isolation on documents
+-- Use ::text comparison (not ::uuid cast) because set_config(..., true) on
+-- commit reverts to empty string "", which would fail ::uuid cast.
 CREATE POLICY documents_tenant_isolation ON documents
     FOR ALL TO rag_app
-    USING (tenant_id = current_setting('app.current_tenant', true));
+    USING (tenant_id::text = current_setting('app.current_tenant', true));
 
--- 14. RLS policies: tenant_id isolation on chunks
-CREATE POLICY chunks_tenant_isolation ON chunks
+-- 14. RLS policies: combined tenant + role isolation on chunks
+-- Single policy with AND: PostgreSQL combines multiple policies with OR,
+-- so we need one policy that checks both tenant and roles together.
+CREATE POLICY chunks_isolation ON chunks
     FOR ALL TO rag_app
-    USING (tenant_id = current_setting('app.current_tenant', true));
+    USING (tenant_id::text = current_setting('app.current_tenant', true)
+           AND allowed_roles && NULLIF(current_setting('app.current_roles', true), '')::text[]);
 
--- 15. RLS policies: allowed_roles overlap on chunks
-CREATE POLICY chunks_role_isolation ON chunks
-    FOR ALL TO rag_app
-    USING (allowed_roles && current_setting('app.current_roles', true)::text[]);
-
--- 16. RLS policies: tenant_id isolation on api_keys
+-- 15. RLS policies: tenant_id isolation on api_keys
 CREATE POLICY api_keys_tenant_isolation ON api_keys
     FOR ALL TO rag_app
-    USING (tenant_id = current_setting('app.current_tenant', true));
+    USING (tenant_id::text = current_setting('app.current_tenant', true));

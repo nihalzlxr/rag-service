@@ -7,7 +7,6 @@ import {
   index,
   vector,
   jsonb,
-  boolean,
 } from "drizzle-orm/pg-core";
 
 export const documents = pgTable(

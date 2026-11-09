@@ -2,18 +2,25 @@ import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import { db, appDb } from "@/lib/db/client";
 import { withRLS } from "@/lib/db/rls";
 import { documents, tenants } from "@/lib/db/schema";
-import { sql, eq } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 
-const TENANT_ID = "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa";
+const TENANT_ID = "dddddddd-dddd-dddd-dddd-dddddddddddd";
+
+type SettingRow = Record<string, unknown>;
 
 describe("withRLS helper", () => {
   beforeAll(async () => {
+    await db.delete(documents);
+    await db.delete(tenants);
+
     await db.insert(tenants).values({ id: TENANT_ID, name: "Test Tenant" });
-    await db.insert(documents).values({
-      id: "11111111-1111-1111-1111-111111111111",
-      tenantId: TENANT_ID,
-      title: "Test Doc",
-      content: "Test content",
+    await withRLS(TENANT_ID, ["public"], async (tx) => {
+      await tx.insert(documents).values({
+        id: "11111111-1111-1111-1111-111111111111",
+        tenantId: TENANT_ID,
+        title: "Test Doc",
+        content: "Test content",
+      });
     });
   });
 
@@ -30,12 +37,12 @@ describe("withRLS helper", () => {
       const tenantResult = await tx.execute(sql`
         SELECT current_setting('app.current_tenant') AS tenant
       `);
-      tenantInside = (tenantResult.rows[0] as any).tenant;
+      tenantInside = (tenantResult.rows[0] as SettingRow).tenant as string;
 
       const rolesResult = await tx.execute(sql`
         SELECT current_setting('app.current_roles') AS roles
       `);
-      rolesInside = (rolesResult.rows[0] as any).roles;
+      rolesInside = (rolesResult.rows[0] as SettingRow).roles as string[];
     });
 
     expect(tenantInside).toBe(TENANT_ID);
@@ -44,11 +51,10 @@ describe("withRLS helper", () => {
 
   it("settings are not leaked outside the transaction", async () => {
     await withRLS(TENANT_ID, ["public"], async (tx) => {
-      // inside transaction, settings are set
       const result = await tx.execute(sql`
         SELECT current_setting('app.current_tenant') AS tenant
       `);
-      expect((result.rows[0] as any).tenant).toBe(TENANT_ID);
+      expect((result.rows[0] as SettingRow).tenant).toBe(TENANT_ID);
     });
 
     // After transaction completes, settings should be reset
@@ -58,12 +64,11 @@ describe("withRLS helper", () => {
   });
 
   it("settings are not leaked across withRLS calls", async () => {
-    // First call with tenant A
     await withRLS(TENANT_ID, ["public"], async (tx) => {
       const result = await tx.execute(sql`
         SELECT current_setting('app.current_tenant') AS tenant
       `);
-      expect((result.rows[0] as any).tenant).toBe(TENANT_ID);
+      expect((result.rows[0] as SettingRow).tenant).toBe(TENANT_ID);
     });
 
     // Second call — settings should be fresh, not leaked from first call
@@ -74,21 +79,18 @@ describe("withRLS helper", () => {
   it("rolls back transaction on error", async () => {
     try {
       await withRLS(TENANT_ID, ["public"], async (tx) => {
-        // Insert a document that will succeed inside transaction
         await tx.insert(documents).values({
           id: "99999999-9999-9999-9999-999999999999",
           tenantId: TENANT_ID,
           title: "Should Be Rolled Back",
           content: "Rollback test",
         });
-        // Then throw
         throw new Error("Simulated error");
       });
     } catch {
       // Expected
     }
 
-    // The rolled-back document should not exist
     const rows = await withRLS(TENANT_ID, ["public"], async (tx) => {
       return await tx
         .select()
