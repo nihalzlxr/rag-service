@@ -103,3 +103,22 @@ export const apiKeys = pgTable(
 
 export type ApiKey = typeof apiKeys.$inferSelect;
 export type NewApiKey = typeof apiKeys.$inferInsert;
+
+export const events = pgTable(
+  "events",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    type: text("type").notNull(), // ingest.started, ask.completed, provider.fallback, rls.violation, etc.
+    tenantId: uuid("tenant_id").notNull(),
+    payload: jsonb("payload").default({}).notNull(), // structured event data (latency, tokens, cost, errors)
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+  },
+  (table) => ({
+    tenantIdIdx: index("events_tenant_id_idx").on(table.tenantId),
+    typeIdx: index("events_type_idx").on(table.type),
+    createdAtIdx: index("events_created_at_idx").on(table.createdAt),
+  })
+);
+
+export type Event = typeof events.$inferSelect;
+export type NewEvent = typeof events.$inferInsert;
