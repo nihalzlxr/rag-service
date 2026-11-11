@@ -107,29 +107,93 @@ function pickPassages(sentences: string[]): string[] {
 }
 
 /**
- * Build a simple question from a passage.
- * Heuristics based on what kind of info the passage contains.
+ * Extract likely named entities from a passage:
+ *   - Capitalized multi-word phrases (People, Places, Organizations)
+ *   - Dates / years (18xx, 19xx, 20xx)
+ *   - Numbers with units or context
+ *
+ * Returns a list of { text, type } candidates we can build questions around.
+ */
+function extractEntities(passage: string): Array<{ text: string; type: string }> {
+  const entities: Array<{ text: string; type: string }> = [];
+
+  // Years (18xx, 19xx, 20xx)
+  const yearMatches = passage.match(/\b(18|19|20)\d{2}\b/g);
+  if (yearMatches) {
+    for (const y of yearMatches) {
+      entities.push({ text: y, type: "year" });
+    }
+  }
+
+  // Capitalized words/phrases (potential proper nouns)
+  // Match sequences of capitalized words, allowing Malayalam/Unicode letters too.
+  const properNounMatches = passage.match(/\b[A-Z][a-zA-Z]+(?:\s+[A-Z][a-zA-Z]+)*\b/g);
+  if (properNounMatches) {
+    for (const n of properNounMatches) {
+      // Skip common sentence-start words that aren't really entities
+      const skip = new Set(["The", "In", "On", "At", "By", "For", "With", "From", "As", "It", "This", "That"]);
+      if (!skip.has(n)) {
+        entities.push({ text: n, type: "proper_noun" });
+      }
+    }
+  }
+
+  // Deduplicate by text
+  const seen = new Set<string>();
+  const unique: Array<{ text: string; type: string }> = [];
+  for (const e of entities) {
+    if (!seen.has(e.text)) {
+      seen.add(e.text);
+      unique.push(e);
+    }
+  }
+  return unique;
+}
+
+/**
+ * Build a specific, passage-grounded question from an answer passage.
+ *
+ * Strategy:
+ *   1. If there's a year, ask "When ...?" about it
+ *   2. If there's a proper noun (person/place/org), ask "Who ...?" or "Where ...?" or "What ...?"
+ *   3. If there's a number, ask "How many ...?" or "What number ...?"
+ *   4. Fall back to a passage-specific question using the first meaningful phrase
  */
 function buildQuestion(passage: string, docTitle: string): string {
-  const lower = passage.toLowerCase();
+  const entities = extractEntities(passage);
 
-  // Year/date patterns -> "When" question
-  if (/\b(18|19|20)\d{2}\b/.test(passage)) {
-    return `When did the event described in "${docTitle}" occur?`;
+  // Prefer year-based "when" questions
+  const years = entities.filter((e) => e.type === "year");
+  if (years.length > 0) {
+    const year = years[0].text;
+    return `In ${docTitle}, what happened in ${year}?`;
   }
 
-  // "is" / "are" definitions -> "What is" question
-  if (/\b(is|are|was|were)\b/.test(lower)) {
-    return `What does "${docTitle}" say about the topic?`;
+  // Proper-noun based questions
+  const nouns = entities.filter((e) => e.type === "proper_noun");
+  if (nouns.length > 0) {
+    const noun = nouns[0].text;
+    const lower = passage.toLowerCase();
+    // Heuristic: if passage mentions "born", "died", "founded", ask who/when
+    if (/\b(born|died|founded|established|established|launched|created)\b/.test(lower)) {
+      return `According to "${docTitle}", who or what is "${noun}" associated with?`;
+    }
+    // If passage mentions a place preposition, ask "where"
+    if (/\b(in|at|from|of|based in|headquartered in)\b/.test(lower)) {
+      return `In "${docTitle}", where is "${noun}" located or based?`;
+    }
+    return `In "${docTitle}", what is "${noun}"?`;
   }
 
-  // Contains numbers -> "How many / what number" question
-  if (/\d/.test(passage)) {
-    return `What numbers or figures does "${docTitle}" mention?`;
+  // Number-based fallback
+  const numberMatch = passage.match(/\b\d+(?:\.\d+)?\s*(percent|%|million|billion|trillion|people|years|days|hours|months|students|users|companies|countries)\b/i);
+  if (numberMatch) {
+    return `In "${docTitle}", what figure or number is mentioned for the topic?`;
   }
 
-  // Default
-  return `What information does "${docTitle}" provide about this topic?`;
+  // Final fallback: use the first 6-8 words of the passage to make it specific
+  const firstWords = passage.split(/\s+/).slice(0, 8).join(" ");
+  return `In "${docTitle}", what does the passage say about "${firstWords}..."?`;
 }
 
 function assignDifficulty(index: number): "easy" | "medium" | "hard" {
