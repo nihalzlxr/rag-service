@@ -1,7 +1,9 @@
 import { chunkMalayalam } from "./malayalam";
 import { chunkEnglish } from "./english";
+import { normalizeText, type NormalizationResult } from "./normalize";
 
-export { chunkMalayalam, chunkEnglish };
+export { chunkMalayalam, chunkEnglish, normalizeText };
+export type { NormalizationResult };
 
 export type Language = "en" | "ml";
 
