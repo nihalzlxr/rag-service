@@ -7,7 +7,9 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
-    "test:rls": "vitest run tests/rls/ --no-file-parallelism"
+    "test:rls": "vitest run tests/rls/ --no-file-parallelism",
+    "eval:fetch": "tsx scripts/fetch-corpus.ts",
+    "eval:seed": "tsx scripts/seed-tenants.ts"
   },
   "dependencies": {
     "ai": "^7.0.165",
