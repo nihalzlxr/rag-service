@@ -152,27 +152,32 @@ pnpm test:rls
 
 | Task | Status | Files to Create/Edit |
 |------|--------|----------------------|
-| `scripts/fetch-corpus.ts`: downloads public docs (e.g., Next.js docs, Node.js docs) + Wikipedia articles (EN + ML) via API; writes to `data/corpus/{en,ml}/` as JSONL: `{ id, title, content, url, language }` | [ ] | New file |
-| `scripts/seed-tenants.ts`: creates 3 synthetic tenants in DB, assigns corpus docs round-robin to tenants, generates API keys for each tenant | [ ] | New file |
-| `pnpm eval:fetch` script runs both; `pnpm eval:seed` seeds DB | [ ] | `package.json` |
+| `scripts/fetch-corpus.ts`: downloads public Wikipedia articles (EN + ML) via API; writes to `data/corpus/{en,ml}/` as JSONL: `{ id, title, content, url, language }` | [x] | New file |
+| `scripts/seed-tenants.ts`: creates 3 synthetic tenants in DB, assigns corpus docs round-robin to tenants, generates API keys for each tenant | [x] | New file |
+| `scripts/generate-golden.ts`: generates 60-item golden set (30 EN + 30 ML) with verbatim answer passages | [x] | New file |
+| `pnpm eval:fetch` script runs corpus fetcher | [x] | `package.json` |
+| `pnpm eval:seed` script seeds DB with tenants, documents, API keys | [x] | `package.json` |
+| `pnpm eval:golden` script generates golden set | [x] | `package.json` |
 
 ### 3.2 Golden Set Format
 
 | Task | Status | Files to Create/Edit |
 |------|--------|----------------------|
-| Define schema: `{ id, question, language, answer_passage, source_doc_id, source_doc_title, tenant_id, difficulty? }` — **references source document and answer passage, not chunk IDs** | [ ] | `eval/golden/schema.json` |
-| Create `eval/golden/en.json` (30 questions) from EN corpus | [ ] | New file |
-| Create `eval/golden/ml.json` (30 questions) from ML corpus | [ ] | New file |
-| Golden set items are derived from corpus: answer passage is a verbatim substring of the source document | [ ] | Verified in fetch/seed scripts |
+| Define schema: `{ id, question, language, answer_passage, source_doc_id, source_doc_title, tenant_id, difficulty? }` — **references source document and answer passage, not chunk IDs** | [x] | `eval/golden/en.json`, `eval/golden/ml.json` |
+| Create `eval/golden/en.json` (30 questions) from EN corpus | [x] | New file |
+| Create `eval/golden/ml.json` (30 questions) from ML corpus | [x] | New file |
+| Golden set items are derived from corpus: answer passage is a verbatim substring of the source document | [x] | Verified against corpus + database |
 
 ### 3.3 Malayalam-Safe Chunker
 
 | Task | Status | Files to Create/Edit |
 |------|--------|----------------------|
-| `src/lib/chunking/malayalam.ts`: uses `Intl.Segmenter('ml', { granularity: 'sentence' })` and paragraph boundaries (`\n\n`); falls back to grapheme clusters if segmenter unavailable; max 1000 chars, 200 overlap | [ ] | New file |
-| `src/lib/chunking/english.ts`: recursive splitter (sentence → paragraph → char) | [ ] | New file |
-| `src/lib/chunking/index.ts`: exports `chunkText(text, language)` dispatching by language | [ ] | New file |
-| Unit tests: `tests/chunking/malayalam.test.ts` — verifies sentence boundaries preserved, no mid-word splits, overlap correct | [ ] | New file (pure function, no Docker) |
+| `src/lib/chunking/malayalam.ts`: uses `Intl.Segmenter('ml', { granularity: 'sentence' })` and paragraph boundaries (`\n\n`); falls back to grapheme clusters if segmenter unavailable; max 1000 chars, 200 overlap | [x] | New file |
+| `src/lib/chunking/english.ts`: recursive splitter (sentence → paragraph → char) | [x] | New file |
+| `src/lib/chunking/index.ts`: exports `chunkText(text, language)` dispatching by language | [x] | New file |
+| `src/lib/chunking/normalize.ts`: NFC normalization + invisible/control char stripping, logs changes | [x] | New file |
+| Unit tests: `tests/chunking/malayalam.test.ts` — verifies sentence boundaries preserved, no mid-word splits, overlap correct | [x] | New file (pure function, no Docker) |
+| Unit tests: `tests/chunking/normalize.test.ts` — NFC, zero-width removal, control char removal, whitespace collapse | [x] | New file |
 
 ### 3.4 Eval Runner (Deterministic Metrics)
 
@@ -900,8 +905,13 @@ curl https://rag-service.vercel.app/api/health
 
 **Next 3 checkpoints** (do in order):
 
-1. **[ ] Milestone 2 complete** — Multi-tenant schema, `rag_app` role, `FORCE ROW LEVEL SECURITY`, `withRLS()` helper, API-key auth, automated RLS tests in CI
-2. **[ ] Milestone 3 complete** — Corpus download, synthetic tenants, golden set (60 items, doc+passage refs), Malayalam chunker (`Intl.Segmenter`), eval runner (recall@k, MRR, cached embeddings), CI gate
+1. **[x] Milestone 2 complete** — Multi-tenant schema, `rag_app` role, `FORCE ROW LEVEL SECURITY`, `withRLS()` helper, API-key auth, automated RLS tests in CI
+2. **[~] Milestone 3 in progress** — Corpus download, synthetic tenants, golden set (60 items, doc+passage refs), Malayalam chunker (`Intl.Segmenter`), eval runner (recall@k, MRR, cached embeddings), CI gate
+   - [x] Corpus fetcher + tenant seeder + golden set generator scripts
+   - [x] Malayalam + English chunker with grapheme-safe overlap
+   - [x] Unicode normalization (NFC + invisible char stripping)
+   - [ ] Eval runner: recall@k, MRR, cached embeddings
+   - [ ] CI gate: recall@5 regression threshold
 3. **[ ] Milestone 4 complete** — `POST /api/ingest` (authenticated), idempotent document creation, BullMQ worker with deterministic chunk IDs, kill-the-worker test passes
 
 ---
