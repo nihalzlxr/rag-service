@@ -1,23 +1,24 @@
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
+import { randomUUID, createHash } from "crypto";
 import { db } from "@/lib/db/client";
 import { withRLS } from "@/lib/db/rls";
 import { lookupApiKey } from "@/lib/auth/api-keys";
 import { tenants, apiKeys } from "@/lib/db/schema";
-import { createHash } from "crypto";
+import { eq } from "drizzle-orm";
 
 function sha256(text: string): string {
   return createHash("sha256").update(text).digest("hex");
 }
 
-const TENANT_ID = "cccccccc-cccc-cccc-cccc-cccccccccccc";
+const TENANT_ID = randomUUID();
 const VALID_KEY = "sk-valid-key-for-testing";
 const REVOKED_KEY = "sk-revoked-key-for-testing";
 
 describe("API key lookup", () => {
   beforeAll(async () => {
-    // Clean up any existing data from previous runs
-    await db.delete(apiKeys);
-    await db.delete(tenants);
+    // Clean up this file's own data from previous runs
+    await db.delete(apiKeys).where(eq(apiKeys.tenantId, TENANT_ID));
+    await db.delete(tenants).where(eq(tenants.id, TENANT_ID));
 
     // Create tenant (no RSL on tenants table)
     await db.insert(tenants).values({
@@ -29,7 +30,7 @@ describe("API key lookup", () => {
     const validHash = sha256(VALID_KEY);
     await withRLS(TENANT_ID, ["public", "admin"], async (tx) => {
       await tx.insert(apiKeys).values({
-        id: "66666666-6666-6666-6666-666666666666",
+        id: randomUUID(),
         keyHash: validHash,
         tenantId: TENANT_ID,
         roles: ["public", "admin"],
@@ -41,7 +42,7 @@ describe("API key lookup", () => {
     const revokedHash = sha256(REVOKED_KEY);
     await withRLS(TENANT_ID, ["public"], async (tx) => {
       await tx.insert(apiKeys).values({
-        id: "77777777-7777-7777-7777-777777777777",
+        id: randomUUID(),
         keyHash: revokedHash,
         tenantId: TENANT_ID,
         roles: ["public"],
@@ -52,8 +53,8 @@ describe("API key lookup", () => {
   });
 
   afterAll(async () => {
-    await db.delete(apiKeys);
-    await db.delete(tenants);
+    await db.delete(apiKeys).where(eq(apiKeys.tenantId, TENANT_ID));
+    await db.delete(tenants).where(eq(tenants.id, TENANT_ID));
   });
 
   it("valid API key returns tenantId and roles", async () => {

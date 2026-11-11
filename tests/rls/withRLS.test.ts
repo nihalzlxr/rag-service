@@ -1,22 +1,24 @@
+import { randomUUID } from "crypto";
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import { db, appDb } from "@/lib/db/client";
 import { withRLS } from "@/lib/db/rls";
 import { documents, tenants } from "@/lib/db/schema";
 import { eq, sql } from "drizzle-orm";
 
-const TENANT_ID = "dddddddd-dddd-dddd-dddd-dddddddddddd";
+const TENANT_ID = randomUUID();
 
 type SettingRow = Record<string, unknown>;
 
 describe("withRLS helper", () => {
   beforeAll(async () => {
-    await db.delete(documents);
-    await db.delete(tenants);
+    await db.delete(documents).where(eq(documents.tenantId, TENANT_ID));
+    await db.delete(tenants).where(eq(tenants.id, TENANT_ID));
 
     await db.insert(tenants).values({ id: TENANT_ID, name: "Test Tenant" });
+    const docId = randomUUID();
     await withRLS(TENANT_ID, ["public"], async (tx) => {
       await tx.insert(documents).values({
-        id: "11111111-1111-1111-1111-111111111111",
+        id: docId,
         tenantId: TENANT_ID,
         title: "Test Doc",
         content: "Test content",
@@ -25,8 +27,8 @@ describe("withRLS helper", () => {
   });
 
   afterAll(async () => {
-    await db.delete(documents);
-    await db.delete(tenants);
+    await db.delete(documents).where(eq(documents.tenantId, TENANT_ID));
+    await db.delete(tenants).where(eq(tenants.id, TENANT_ID));
   });
 
   it("sets app.current_tenant and app.current_roles inside transaction", async () => {
